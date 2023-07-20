@@ -1,17 +1,22 @@
 package com.example.myui
 
+import app.cash.paparazzi.Paparazzi
 import org.junit.Test
-
-import org.junit.Assert.*
+import org.junit.Rule
 
 /**
  * Example local unit test, which will execute on the development machine (host).
  *
  * See [testing documentation](http://d.android.com/tools/testing).
  */
-class ExampleUnitTest {
+class MyComponentTest {
+    @get:Rule
+    val paparazzi = Paparazzi()
+
     @Test
-    fun addition_isCorrect() {
-        assertEquals(4, 2 + 2)
+    fun myComponentScreenshotTest() {
+        paparazzi.snapshot {
+            MyComponentPreview()
+        }
     }
 }

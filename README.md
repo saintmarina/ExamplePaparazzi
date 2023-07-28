@@ -1,6 +1,19 @@
 # ExamplePaparazzi
 Sample Android native project implementing screenshot testing with Paparazzi
 
+### Table of contents
+1. [Introduction](#introduction)
+    1. [Limitations to keep in mind](#limitations-to-keep-in-mind)
+    2. [Workarounds](#workarounds)
+2. [How to set up Paparazzi?](#how-to-set-up-paparazzi)
+3. [How to test a composable larger than the screenshot size?](#how-to-test-a-composable-larger-than-the-screenshot-size)
+4. [How to test a small composable?](#how-to-test-a-small-composable)
+5. [How to run the tests?](#how-to-run-the-tests)
+    1. [Create golden screenshots](#create-golden-screenshots)
+    2. [Validate against the golden screenshots](#validate-against-the-golden-screenshots)
+    3. [Example of a failing test](#example-of-a-failing-test)
+6. [Troubleshooting](#troubleshooting)
+
 ## Introduction
 
 Snapshot tests are a useful tool for making sure your UI does not change unexpectedly.
@@ -17,10 +30,131 @@ It achieves this by leveraging the undocumented IDE compose preview facility. Ev
 1. Paparazzi can't be placed in a module with other testing dependencies (like Robolectric, Espresso). When placed in the same module Paparazzi breaks tests that are running with the other frameworks. See more about this issue [here](https://github.com/cashapp/paparazzi/issues/622).
 2. Paparazzi won't do any network requests to get resources. If you have a components that perform network calls in order to get resources, the screenshot tests will break in mysterious ways!
 
+## Workarounds
+
+1. If for example you use Robolectric in your project, you to set up all Paparazzi tests in a separate module. See folder structure example in the [set up section](#set-up).
+
+2. Do **not** use any network requests in your preview. If you have images loaded with Glide or Coil, think about repacing those images with base64 strings for example, or have a set of images specifically for Paparazzi tests. If you decide to go with base64 strings:
+
+    1. This command turns your image to a base 64 string and puts the string **in your clipboard**. Replace `image.jpg` by your image path and run it in your terminal.
+        ```bash
+        openssl base64 -in image.jpeg | pbcopy
+        ```
+    2. Once you have your string in your clipboard, create a new kotlin class file called `Base64[paste name of your component].kt`
+    3. Put this inside your file
+        ```kotlin
+        class Base64[paste name of your component]ImageProvider : PreviewParameterProvider<String> { // TODO: rename the class
+            override val values = sequenceOf(
+                """
+                // TODO: paste your image string here
+                """
+            )
+        }
+        ```
+    4. Write your preview like this:
+       ```kotlin
+       @Preview
+       @Composable
+       fun MyComponentPreview(@PreviewParameter(Base64MyImageProvider::class) imageBase64: String) { // TODO: rename the preview
+           MyComponent(image = imageBase64)
+       }
+       ```
 
 ## How to set up Paparazzi?
+1. If you use another testing framework in your project, create a `screenshot-test` module as a sibling to your ui module. This module must contain only `test` folder.
+    ```
+   myUi
+    ├── mobile
+    │   ├── main
+    │   │   ├── src
+    │   │   │   ├── main
+    │   │   │   └── test [unitTest]
+    │   │   └── build.gradle
+    │   ├── screenshot-test
+    │   │   ├── src
+    │   │   │   └── test [unitTest]
+    │   │   └── build.gradle
 
-Write a snapshot test in the unit test folder:
+    ```
+    If you have **multiple variants** like: mobile, television, etc., you don't have to create a `snapshot-test` module for each of them. You may use this module structure:
+    ```
+    ├── myUi
+        ├── mobile
+        ├── television
+        ├── screenshot-test
+                ├── src
+                │    └── test [unitTest]
+                └── build.gradle
+
+    ```
+2. If you only using paparazzi, you can put the screenshot test directly in the unit folder and you don't need to create a seprate module for it.
+    ````
+    ├── myUi
+        ├── mobile
+        ├── television
+        ├── src
+            ├── src
+            │    └── test [unitTest]
+            │        └── MyPaparazziTest.kt
+            └── build.gradle
+    ```
+3. If you do need a separate module for paparazzi test, then add this to the `screenshot-test/build.gradle`:
+
+```groovy
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'app.cash.paparazzi'
+apply from: "${rootDir}/common/tools/gradle/config/android_project_commons.gradle"
+
+android {
+    compileSdkVersion 33
+
+    namespace 'my.package.name.snapshot.test' // TODO: Change this to your package name
+
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+        multiDexEnabled true
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    testOptions {
+        unitTests {
+            all {
+                testLogging {
+                    events 'passed', 'skipped', 'failed'
+                }
+            }
+            returnDefaultValues = true
+        }
+        animationsDisabled = true
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11.toString()
+    }
+
+    buildFeatures {
+        compose true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion libs.versions.jetpackComposeCompilerVersion.get()
+    }
+}
+
+dependencies {
+    testImplementation "androidx.compose.material3:material3:1.1.1"
+    implementation project('my:project:path:main') // TODO: Change this to your tested module name
+}
+```
+
+4. Write a snapshot test in the unit test folder:
 
 ```kotlin
     import ...
